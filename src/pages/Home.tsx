@@ -36,13 +36,7 @@ function dedupeById(items: JokePresentation[]) {
 }
 
 export function Home() {
-  const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('jokesphere-theme', () => {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark'
-    }
-
-    return 'light'
-  })
+  const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('jokesphere-theme', 'light')
   const [currentJoke, setCurrentJoke] = useState<JokePresentation | null>(null)
   const [favorites, setFavorites] = useLocalStorage<JokePresentation[]>('jokesphere-favorites', [])
   const [history, setHistory] = useLocalStorage<JokePresentation[]>('jokesphere-history', [])
@@ -55,12 +49,21 @@ export function Home() {
   const toastTimer = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const seenJokeSet = useMemo(() => new Set(seenJokeIds), [seenJokeIds])
+  const [initialLoading, setInitialLoading] = useState(true)
+  const initialTimerRef = useRef<number | null>(null)
+  const MIN_INITIAL_LOADING_MS = 2300
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
   useEffect(() => {
+    // Start the minimum initial loading timer (so the hand-writing animation can finish)
+    initialTimerRef.current = window.setTimeout(() => {
+      initialTimerRef.current = null
+      setInitialLoading(false)
+    }, MIN_INITIAL_LOADING_MS)
+
     void loadFreshJoke()
 
     return () => {
@@ -68,6 +71,9 @@ export function Home() {
 
       if (toastTimer.current) {
         window.clearTimeout(toastTimer.current)
+      }
+      if (initialTimerRef.current) {
+        window.clearTimeout(initialTimerRef.current)
       }
     }
   }, [])
@@ -224,7 +230,7 @@ export function Home() {
   }
 
   const displayCategories = currentJoke ? getFallbackCategories(currentJoke) : []
-  const isInitialLoad = isLoading && !currentJoke && !error
+  const isInitialLoad = initialLoading || (isLoading && !currentJoke && !error)
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">

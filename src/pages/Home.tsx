@@ -5,6 +5,10 @@ import { JokeCard } from '../components/JokeCard'
 import { Loader } from '../components/Loader'
 import { Navbar } from '../components/Navbar'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { HandWrittenTitle } from '../components/ui/hand-writing-text'
+import { MouseFollowingEyes } from '../components/ui/mouse-following-eyes'
+import { Perspective } from '../components/ui/perspective-highlight'
+import { Tweet } from '../components/ui/tweet'
 import '../App.css'
 import {
   buildJokePresentation,
@@ -42,6 +46,7 @@ export function Home() {
   const [currentJoke, setCurrentJoke] = useState<JokePresentation | null>(null)
   const [favorites, setFavorites] = useLocalStorage<JokePresentation[]>('jokesphere-favorites', [])
   const [history, setHistory] = useLocalStorage<JokePresentation[]>('jokesphere-history', [])
+  const [seenJokeIds, setSeenJokeIds] = useLocalStorage<number[]>('jokesphere-seen-jokes', [])
   const [shuffleMode, setShuffleMode] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +54,7 @@ export function Home() {
   const [transitionId, setTransitionId] = useState(0)
   const toastTimer = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const seenJokeSet = useMemo(() => new Set(seenJokeIds), [seenJokeIds])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -77,8 +83,15 @@ export function Home() {
     abortControllerRef.current = controller
 
     try {
-      const jokes = await fetchRandomJokes(controller.signal)
-      const nextJoke = buildJokePresentation(pickRandom(jokes))
+      const nextJoke = await findFreshJoke(controller.signal)
+
+      setSeenJokeIds((previous) => {
+        if (previous.includes(nextJoke.rawId)) {
+          return previous
+        }
+
+        return [nextJoke.rawId, ...previous].slice(0, 120)
+      })
 
       setCurrentJoke(nextJoke)
       setHistory((previous) =>
@@ -98,6 +111,26 @@ export function Home() {
     }
   }
 
+  async function findFreshJoke(signal?: AbortSignal) {
+    const maxAttempts = 4
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const jokes = await fetchRandomJokes(signal)
+      const candidates = jokes
+        .map((joke) => buildJokePresentation(joke))
+        .filter((joke) => !seenJokeSet.has(joke.rawId))
+
+      if (candidates.length > 0) {
+        return pickRandom(candidates)
+      }
+    }
+
+    const fallbackBatch = await fetchRandomJokes(signal)
+    const fallbackCandidates = fallbackBatch.map((joke) => buildJokePresentation(joke))
+
+    return pickRandom(fallbackCandidates)
+  }
+
   function showToast(message: string) {
     setToast(message)
 
@@ -111,8 +144,9 @@ export function Home() {
   }
 
   function handleGenerate() {
-    if (shuffleMode && history.length > 0) {
-      const shuffledJoke = pickRandom(history)
+    if (shuffleMode && history.length > 1) {
+      const shuffledCandidates = history.filter((joke) => joke.rawId !== currentJoke?.rawId)
+      const shuffledJoke = pickRandom(shuffledCandidates.length > 0 ? shuffledCandidates : history)
       setCurrentJoke(shuffledJoke)
       setTransitionId((value) => value + 1)
       showToast('Shuffled from your history')
@@ -190,14 +224,29 @@ export function Home() {
   }
 
   const displayCategories = currentJoke ? getFallbackCategories(currentJoke) : []
+  const isInitialLoad = isLoading && !currentJoke && !error
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(212,106,140,0.18),_transparent_32%),radial-gradient(circle_at_80%_10%,_rgba(153,122,255,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(86,214,209,0.16),_transparent_28%)]" />
-      <div className="pointer-events-none absolute left-10 top-24 h-36 w-36 rounded-full bg-[rgba(255,255,255,0.45)] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 right-12 h-44 w-44 rounded-full bg-[rgba(212,106,140,0.12)] blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,236,130,0.35),_transparent_26%),radial-gradient(circle_at_80%_10%,_rgba(143,211,255,0.28),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(255,212,97,0.2),_transparent_24%)]" />
+      <div className="pointer-events-none absolute left-10 top-24 h-36 w-36 rounded-full bg-[rgba(255,255,255,0.5)] blur-3xl" />
+      <div className="pointer-events-none absolute bottom-10 right-12 h-44 w-44 rounded-full bg-[rgba(143,211,255,0.18)] blur-3xl" />
 
-      <main className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      {isInitialLoad ? (
+        <main className="relative flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+          <div className="absolute left-4 top-4 sm:left-8 sm:top-8">
+            <MouseFollowingEyes className="w-44 sm:w-52" />
+          </div>
+          <div className="w-full max-w-5xl rounded-[36px] border border-white/70 bg-[var(--surface)] px-6 py-10 shadow-[var(--shadow)] backdrop-blur-xl sm:px-10 sm:py-16">
+            <HandWrittenTitle
+              title="JokeSphere"
+              subtitle="Dusting off a fresh laugh before the main page opens."
+            />
+          </div>
+        </main>
+      ) : null}
+
+      <main className={`relative mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8 ${isInitialLoad ? 'hidden' : 'flex'}`}>
         <Navbar
           theme={theme}
           savedCount={favorites.length}
@@ -242,9 +291,10 @@ export function Home() {
                 </button>
               </motion.div>
             ) : currentJoke ? (
-              <div key={transitionId} className="relative">
+              <Perspective className="relative">
                 <AnimatePresence mode="wait">
                   <JokeCard
+                    key={transitionId}
                     joke={currentJoke}
                     isFavorite={favoriteIds.has(currentJoke.rawId)}
                     onToggleFavorite={handleToggleFavorite}
@@ -254,7 +304,7 @@ export function Home() {
                     }}
                   />
                 </AnimatePresence>
-              </div>
+              </Perspective>
             ) : null}
 
             {currentJoke ? (
@@ -305,6 +355,17 @@ export function Home() {
           </div>
 
           <aside className="space-y-4">
+            {currentJoke ? (
+              <Tweet
+                id={`joke-${currentJoke.rawId}`}
+                authorName="JokeSphere"
+                handle="@jokesphere"
+                text={createShareText(currentJoke)}
+                likes={(currentJoke.rawId * 37) % 5000 + 128}
+                className="border-[var(--line)] bg-[var(--surface-strong)]"
+              />
+            ) : null}
+
             <div className="rounded-[30px] border border-white/60 bg-[var(--surface)] p-5 shadow-[var(--shadow)] backdrop-blur-xl">
               <div className="flex items-center justify-between gap-3">
                 <div>

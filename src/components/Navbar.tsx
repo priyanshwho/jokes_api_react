@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Highlight } from './ui/perspective-highlight'
 
 type NavbarProps = {
   theme: 'light' | 'dark'
@@ -26,7 +27,7 @@ export function Navbar({
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-[family-name:var(--font-heading)] text-3xl leading-none text-[var(--text)] sm:text-4xl">
-            A playful joke browser with personality
+            A <Highlight color="blue">playful</Highlight> joke browser with personality
           </h1>
           <span className="rounded-full border border-[var(--line)] bg-white/70 px-3 py-1 text-xs font-medium text-[var(--muted)] backdrop-blur">
             Fresh laughs, saved locally
